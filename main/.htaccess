@@ -1,0 +1,17 @@
+RewriteEngine On
+
+# Force SSL (Uncomment if not using reverse proxy)
+#RewriteCond %{HTTPS} off
+#RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=302]
+
+# Set error pages for the blocked stuff
+ErrorDocument 403 /index.php/404
+ErrorDocument 404 /index.php/404
+
+# Extra rewrites
+RewriteRule ^get\/(.*)$ /index.php/get?uuid=$1 [L]
+
+# Main rewrite
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ /index.php/$1 [L]
