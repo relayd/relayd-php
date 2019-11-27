@@ -12,6 +12,8 @@ class Relayd {
     private $authDriver = null;
     private $storageDriver = null;
 
+    private $middlewares = null;
+
     public function __construct(array $serverConfig) {
         $this->serverConfig = $serverConfig;
         $this->configuration = new Configuration($this);
@@ -66,24 +68,6 @@ class Relayd {
         return $this->storageDriver;
     }
 
-    // Messages
-
-    public function getSentMessage(string $uuid): SentMessage {
-        return $this->getStorageDriver()->getSentMessage($uuid);
-    }
-
-    public function createSentMessage(string $from, string $to, string $text): SentMessage {
-        return $this->getStorageDriver()->createSentMessage($from, $to, $text);
-    }
-
-    public function getReceivedMessage(string $uuid): ReceivedMessage {
-        return $this->getStorageDriver()->getReceivedMessage($uuid);
-    }
-
-    public function createReceivedMessage(string $from, string $to, string $text): ReceivedMessage {
-        $this->getStorageDriver()->createReceivedMessage($from, $to, $text);
-    }
-
     // Random code
 
     private function generateRandomCode(int $length = 8): string { // Generate a random code that isn't just letters or just numbers
@@ -112,5 +96,30 @@ class Relayd {
             }
         }
         return $found_code;
+    }
+
+    // Pass to middleware and get response
+
+    public function sendToMiddleware(int $eventType, array $data): MiddlewareResponse {
+         if ($this->middlewares == null) {
+             // Initialize middleware
+             $this->middlewares = array();
+             foreach ($this->getServerConfig()['middleware'] as $middlewareName) {
+                 if (!is_file(ROOT_PATH . "/core/custom/middleware/" . $middlewareName . ".php")) {
+                     die("The middleware ($middlewareName) was not found.");
+                 }
+                 require_once ROOT_PATH . "/core/custom/middleware/" . $middlewareName. ".php";
+                 $middlewareObject = new $middlewareName($this);
+                 array_push($this->middlewares, $middlewareObject);
+             }
+         }
+         $result = new MiddlewareResponse(MiddlewareResponseCodes::ALLOW, $data);
+         foreach ($this->middlewares as $middleware) {
+             $result = $middleware->handle($eventType, $result);
+             if ($result->getMiddlewareResponseCode() == MiddlewareResponseCodes::REJECT) {
+                 return $result;
+             }
+         }
+         return $result;
     }
 }

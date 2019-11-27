@@ -20,6 +20,7 @@ class ResponseCodes {
     public const NO_HOST = 15;
     public const NO_UUID = 16;
     public const NO_PERMISSION = 17;
+    public const MIDDLEWARE_REJECT = 18;
 
     public const NOT_FOUND = 404;
 }

@@ -9,7 +9,7 @@ ErrorDocument 403 /index.php/404
 ErrorDocument 404 /index.php/404
 
 # Extra rewrites
-RewriteRule ^get\/(.*)$ /index.php/get?uuid=$1 [L]
+RewriteRule ^get\/sent\/(.*)$ /index.php/get/sent?uuid=$1 [L]
 
 # Main rewrite
 RewriteCond %{REQUEST_FILENAME} !-f

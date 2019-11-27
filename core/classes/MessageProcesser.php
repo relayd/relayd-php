@@ -16,7 +16,7 @@ class MessageProcesser {
             return ResponseCodes::INVALID_UUID;
         }
         // Send the request to get the message
-        $ch = curl_init("https://" . $relaydHost . "/get/" . $uuid);
+        $ch = curl_init("https://" . $relaydHost . "/get/sent/" . $uuid);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -49,7 +49,7 @@ class MessageProcesser {
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, $this->relayd->getServerConfig()['server']['requestTimeout']);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->relayd->getConfiguration()->getServerTimeout());
         curl_setopt($ch, CURLOPT_HTTPHEADER, array(
             "X-Relayd: 1"
         ));
@@ -67,11 +67,27 @@ class MessageProcesser {
         if (!in_array($relaydHost, $remoteServerJson['relayd']['allowedSenders'])) {
             return ResponseCodes::SENDER_NOT_ALLOWED;
         }
-        $this->relayd->createReceivedMessage($remoteMessageJson['data']['toAddress'], $remoteMessageJson['data']['fromAddress'], $remoteMessageJson['data']['text']);
+        $this->relayd->getStorageDriver()->createReceivedMessage($remoteMessageJson['data']['toAddress'], $remoteMessageJson['data']['fromAddress'], $remoteMessageJson['data']['text']);
         return ResponseCodes::SUCCESS;
     }
 
     public function sendMessage(?string $toAddress, ?string $fromAddress, ?string $text): int {
+        $middlewareData = array("toAddress" => $toAddress, "fromAddress" => $fromAddress, "text" => $text);
+        $middlewareResponse = $this->relayd->sendToMiddleware(MiddlewareCodes::PRE_SEND, $middlewareData);
+        if ($middlewareResponse->getMiddlewareResponseCode() == MiddlewareResponseCodes::REJECT) {
+            return ResponseCodes::MIDDLEWARE_REJECT;
+        }
+        // Update data based on middleware
+        if (isset($middlewareResponse->getData()['toAddress'])) {
+            $toAddress = $middlewareResponse->getData()['toAddress'];
+        }
+        if (isset($middlewareResponse->getData()['fromAddress'])) {
+            $fromAddress = $middlewareResponse->getData()['fromAddress'];
+        }
+        if (isset($middlewareResponse->getData()['text'])) {
+            $text = $middlewareResponse->getData()['text'];
+        }
+        // Validate data
         $validateTo = $this->relayd->getValidation()->validateAddress($toAddress);
         if ($validateTo != ResponseCodes::SUCCESS) {
             return $validateTo;
@@ -91,7 +107,7 @@ class MessageProcesser {
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, $this->relayd->getServerConfig()['server']['requestTimeout']);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->relayd->getConfiguration()->getServerTimeout());
         curl_setopt($ch, CURLOPT_HTTPHEADER, array(
             "X-Relayd: 1"
         ));
@@ -106,7 +122,7 @@ class MessageProcesser {
         if (!is_string($remoteServerJson['relayd']['host'])) {
             return ResponseCodes::INVALID_RESPONSE;
         }
-        $sentMessage = $this->relayd->createSentMessage($toAddress, $fromAddress, $text);
+        $sentMessage = $this->relayd->getStorageDriver()->createSentMessage($toAddress, $fromAddress, $text);
         $postFields = [
             "host" => $this->relayd->getConfiguration()->getServerHost(),
             "uuid" => $sentMessage->getUuid()
@@ -117,7 +133,7 @@ class MessageProcesser {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POST,true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $postFields);
-        curl_setopt($ch, CURLOPT_TIMEOUT, $this->relayd->getServerConfig()['server']['requestTimeout']);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->relayd->getConfiguration()->getServerTimeout());
         curl_setopt($ch, CURLOPT_HTTPHEADER, array(
             "X-Relayd: 1"
         ));
